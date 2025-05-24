@@ -4,7 +4,7 @@ import os
 import logging
 from data_methods import parse_data, create_chunks
 from typing import List, Dict, Tuple, Any
-from formats import Chunk, TrialMetaData, DesignMetaData, EligibilityMetaData, ChunkType
+from formats import Chunk, TrialMetaData, ChunkType
 
 BASE_URL: str = "https://clinicaltrials.gov/api/v2/studies"
 DATA_PATH: str = os.path.join("preprocessing", "trial_data", "trials.jsonl")
@@ -64,11 +64,10 @@ def get_full_studies(study_ids: List[str]) -> None:
 
                 except Exception as parse_err:
                     print(f"[ERROR] Failed to process {nct_id}: {parse_err}")
-                    continue
+                    break
 
                 counter += 1
                 print("-------------------------------------------------------\n")
-
     except FileNotFoundError:
         print("[ERROR] Output file path not found.")
     except Exception as e:

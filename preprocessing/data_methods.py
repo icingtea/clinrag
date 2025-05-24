@@ -1,7 +1,9 @@
-from typing import List, Dict, Tuple, Any
-from formats import Chunk, TrialMetaData, DesignMetaData, EligibilityMetaData, ChunkType
-from sentence_transformers import SentenceTransformer
 import torch
+import numpy as np
+from datetime import datetime
+from typing import List, Dict, Tuple, Any, Optional
+from formats import Chunk, TrialMetaData, ChunkType
+from sentence_transformers import SentenceTransformer
 
 MODEL = SentenceTransformer("intfloat/e5-large-v2")
 
@@ -37,36 +39,22 @@ def parse_data(full_study_data: Dict[str, Any]) -> TrialMetaData:
         conditions_module,
         arms_interventions_module
     ) = unpack_protocol_sections(full_study_data)
-
-    design_metadata: DesignMetaData = DesignMetaData(
+    
+    trial_metadata: TrialMetaData = TrialMetaData(
+        nctId=identification_module.get("nctId", None),
+        status=status_module.get("overallStatus", None),
+        startDate=status_module.get("startDateStruct", {}).get("date", None),
+        completionDate=status_module.get("completionDateStruct", {}).get("date", None),
         studyType=design_module.get("studyType", None),
-        phases=design_module.get("phases", []),
         allocation=design_info.get("allocation", None),
         interventionModel=design_info.get("interventionModel", None),
-        primaryPurpose=design_info.get("primaryPurpose", None),
         maskingType=masking_info.get("masking", None),
-        whoMasked=masking_info.get("whoMasked", []) or None,
-        enrollmentCount=enrollment_info.get("count", None)
-    )
-
-    eligibility_metadata: EligibilityMetaData = EligibilityMetaData(
+        enrollmentCount=enrollment_info.get("count", None),
         healthyVolunteers=eligibility_module.get("healthyVolunteers", None),
         sex=eligibility_module.get("sex", None),
         minimumAge=eligibility_module.get("minimumAge", None),
         maximumAge=eligibility_module.get("maximumAge", None),
-        stdAges=eligibility_module.get("stdAges", []) or None
-    )
-
-    trial_metadata: TrialMetaData = TrialMetaData(
-        nctId=identification_module.get("nctId", None),
-        acronym=identification_module.get("acronym", None),
-        status=status_module.get("overallStatus", None),
-        statusVerifiedDate=status_module.get("statusVerifiedDate", None),
-        whyStopped=status_module.get("whyStopped", None),
-        startDate=status_module.get("startDateStruct", {}).get("date", None),
-        completionDate=status_module.get("completionDateStruct", {}).get("date", None),
-        designInfo=design_metadata,
-        eligibility=eligibility_metadata
+        stdAges=eligibility_module.get("stdAges", None)
     )
 
     return trial_metadata
@@ -106,8 +94,8 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         embeddings=embed_text(overview_chunk_text, ChunkType.OVERVIEW)
     )
 
-    phases: List[str] = design_module.get("phases", []) or ["No info available"]
-    masked_entities: List[str] = masking_info.get("whoMasked", []) or ["No info available"]
+    phases: List[str] = design_module.get("phases", ["No info available"])
+    masked_entities: List[str] = masking_info.get("whoMasked", ["No info available"])
 
     design_chunk_text: str = "\n".join([
         f"Study Design Details ({nct_id})",
@@ -126,7 +114,7 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         embeddings=embed_text(design_chunk_text, ChunkType.DESIGN)
     )
 
-    std_ages: List[str] = eligibility_module.get("stdAges", []) or ["No info available"]
+    std_ages: List[str] = eligibility_module.get("stdAges", ["No info available"])
 
     eligibility_chunk_text = "\n".join([
         f"Eligibility Criteria ({nct_id})",
@@ -145,8 +133,8 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         embeddings=embed_text(eligibility_chunk_text, ChunkType.ELIGIBILITY)
     )
 
-    conditions: List[str] = conditions_module.get("conditions", []) or ["No info available"]
-    keywords: List[str] = conditions_module.get("keywords", []) or ["No info available"]
+    conditions: List[str] = conditions_module.get("conditions", ["No info available"])
+    keywords: List[str] = conditions_module.get("keywords", ["No info available"])
 
     conditions_chunk_text = "\n".join([
         f"Condition Details ({nct_id})",
@@ -257,10 +245,10 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
     ]
 
 def embed_text(text: str, chunk_type: ChunkType) -> List[float]:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device: torch.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     print(f"\t[embedding:{chunk_type.value}] using device: {device}")
-    embeddings = MODEL.encode([text], device=device)
+    embeddings: np.ndarray = MODEL.encode([text], device=device)
     print(f"\t[embedding:{chunk_type.value}] size: {embeddings.shape}\n")
 
     return embeddings.tolist()[0]

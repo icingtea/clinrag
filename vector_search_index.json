@@ -1,0 +1,66 @@
+{
+    "fields": [
+        {
+            "type": "vector",
+            "path": "embeddings",
+            "numDimensions": 1024,
+            "similarity": "cosine"
+        },
+        {
+            "type": "filter",
+            "path": "nctId"
+        },
+        {
+            "type": "filter",
+            "path": "status"
+        },
+        {
+            "type": "filter",
+            "path": "startDate"
+        },
+        {
+            "type": "filter",
+            "path": "completionDate"
+        },
+        {
+            "type": "filter",
+            "path": "studyType"
+        },
+        {
+            "type": "filter",
+            "path": "allocation"
+        },
+        {
+            "type": "filter",
+            "path": "interventionModel"
+        },
+        {
+            "type": "filter",
+            "path": "maskingType"
+        },
+        {
+            "type": "filter",
+            "path": "enrollmentCount"
+        },
+        {
+            "type": "filter",
+            "path": "healthyVolunteers"
+        },
+        {
+            "type": "filter",
+            "path": "sex"
+        },
+        {
+            "type": "filter",
+            "path": "minimumAge"
+        },
+        {
+            "type": "filter",
+            "path": "maximumAge"
+        },
+        {
+            "type": "filter",
+            "path": "stdAges"
+        }
+    ]
+}

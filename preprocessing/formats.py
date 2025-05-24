@@ -1,6 +1,7 @@
-from typing import List, Optional, Any
+from typing import List, Optional
 from pydantic import BaseModel
 from enum import Enum
+from datetime import datetime
 
 class ChunkType(str, Enum):
     OVERVIEW = "overview"
@@ -11,33 +12,21 @@ class ChunkType(str, Enum):
     OUTCOMES_PRIMARY = "primaryOutcomes"
     OUTCOMES_SECONDARY = "secondaryOutcomes"
 
-class DesignMetaData(BaseModel):
+class TrialMetaData(BaseModel):
+    nctId: str
+    status: Optional[str] = None
+    startDate: Optional[str] = None
+    completionDate: Optional[str] = None
     studyType: Optional[str] = None
-    phases: Optional[List[str]] = None
     allocation: Optional[str] = None
     interventionModel: Optional[str] = None
-    primaryPurpose: Optional[str] = None
     maskingType: Optional[str] = None
-    whoMasked: Optional[List[str]] = None
     enrollmentCount: Optional[int] = None
-
-class EligibilityMetaData(BaseModel):
     healthyVolunteers: Optional[bool] = None
     sex: Optional[str] = None
     minimumAge: Optional[str] = None
     maximumAge: Optional[str] = None
     stdAges: Optional[List[str]] = None
-
-class TrialMetaData(BaseModel):
-    nctId: str
-    acronym: Optional[str] = None
-    status: Optional[str] = None
-    statusVerifiedDate: Optional[str] = None
-    whyStopped: Optional[str] = None
-    startDate: Optional[str] = None
-    completionDate: Optional[str] = None
-    designInfo: Optional[DesignMetaData] = None
-    eligibility: Optional[EligibilityMetaData] = None
 
 class Chunk(BaseModel):
     source_id: str
