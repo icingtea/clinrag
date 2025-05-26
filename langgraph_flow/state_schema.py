@@ -70,7 +70,7 @@ class PromptMetadata(BaseModel):
     sex: List[Sex] = Field(default_factory=list)
     stdAges: List[StdAges] = Field(default_factory=list)
 
-class GraphState(TypedDict):
+class GraphState(BaseModel):
     question: str
     metadata: Dict[str, Any]
     filter: Dict[str, Any]
