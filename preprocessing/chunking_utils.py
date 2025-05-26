@@ -1,17 +1,23 @@
-import torch
+import os
 import numpy as np
-from typing import List, Dict, Tuple, Any
-from preprocessing.schemas import Chunk, TrialMetaData, ChunkType
+import torch
+from dotenv import load_dotenv
+from typing import List
 from sentence_transformers import SentenceTransformer
+from preprocessing.schemas import Chunk, TrialMetaData, ChunkType
 
-MODEL = SentenceTransformer("intfloat/e5-large-v2")
+load_dotenv()
+model = SentenceTransformer(os.getenv("EMBEDDING_MODEL"))
 
-def unpack_protocol_sections(study: Dict[str, Any]) -> Tuple[
-    Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any],
-    Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]
-]:
-    protocol: Dict[str, Any] = study.get("protocolSection", {})
+def embed_text(text: str, chunk_type: ChunkType) -> List[float]:
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"\t[embedding:{chunk_type.value}] using device: {device}")
+    embeddings = model.encode([text], device=device)
+    print(f"\t[embedding:{chunk_type.value}] size: {embeddings.shape}\n")
+    return embeddings[0].tolist()
 
+def unpack_protocol_sections(study: dict) -> tuple:
+    protocol = study.get("protocolSection", {})
     return (
         protocol,
         protocol.get("designModule", {}),
@@ -25,9 +31,9 @@ def unpack_protocol_sections(study: Dict[str, Any]) -> Tuple[
         protocol.get("armsInterventionsModule", {})
     )
 
-def parse_data(full_study_data: Dict[str, Any]) -> TrialMetaData:
+def parse_data(full_study_data: dict) -> TrialMetaData:
     (
-        protocol,
+        _,
         design_module,
         design_info,
         enrollment_info,
@@ -35,30 +41,28 @@ def parse_data(full_study_data: Dict[str, Any]) -> TrialMetaData:
         eligibility_module,
         identification_module,
         status_module,
-        conditions_module,
-        arms_interventions_module
+        _,
+        _
     ) = unpack_protocol_sections(full_study_data)
-    
-    trial_metadata: TrialMetaData = TrialMetaData(
-        nctId=identification_module.get("nctId", None),
-        status=status_module.get("overallStatus", None),
-        startDate=status_module.get("startDateStruct", {}).get("date", None),
-        completionDate=status_module.get("completionDateStruct", {}).get("date", None),
-        studyType=design_module.get("studyType", None),
-        allocation=design_info.get("allocation", None),
-        interventionModel=design_info.get("interventionModel", None),
-        maskingType=masking_info.get("masking", None),
-        enrollmentCount=enrollment_info.get("count", None),
-        healthyVolunteers=eligibility_module.get("healthyVolunteers", None),
-        sex=eligibility_module.get("sex", None),
-        minimumAge=eligibility_module.get("minimumAge", None),
-        maximumAge=eligibility_module.get("maximumAge", None),
-        stdAges=eligibility_module.get("stdAges", None)
+
+    return TrialMetaData(
+        nctId=identification_module.get("nctId"),
+        status=status_module.get("overallStatus"),
+        startDate=status_module.get("startDateStruct", {}).get("date"),
+        completionDate=status_module.get("completionDateStruct", {}).get("date"),
+        studyType=design_module.get("studyType"),
+        allocation=design_info.get("allocation"),
+        interventionModel=design_info.get("interventionModel"),
+        maskingType=masking_info.get("masking"),
+        enrollmentCount=enrollment_info.get("count"),
+        healthyVolunteers=eligibility_module.get("healthyVolunteers"),
+        sex=eligibility_module.get("sex"),
+        minimumAge=eligibility_module.get("minimumAge"),
+        maximumAge=eligibility_module.get("maximumAge"),
+        stdAges=eligibility_module.get("stdAges")
     )
 
-    return trial_metadata
-
-def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData) -> List[Chunk]:
+def create_chunks(full_study_data: dict, study_metadata: TrialMetaData) -> List[Chunk]:
     (
         protocol,
         design_module,
@@ -72,9 +76,10 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         arms_interventions_module
     ) = unpack_protocol_sections(full_study_data)
 
-    nct_id: str = identification_module.get("nctId")
+    nct_id = identification_module.get("nctId", "Unknown")
 
-    overview_chunk_text: str = "\n".join([
+    # OVERVIEW
+    overview_chunk_text = "\n".join([
         f"Study Overview ({nct_id})",
         f"Study Title: {identification_module.get('officialTitle', 'No info available')}",
         f"Overview Title: {identification_module.get('briefTitle', 'No info available')}",
@@ -84,7 +89,6 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         f"Completion Date: {status_module.get('completionDateStruct', {}).get('date', 'No info available')}",
         f"Why Stopped (if applicable): {status_module.get('whyStopped', 'N/A')}"
     ])
-
     overview_chunk = Chunk(
         source_id=nct_id,
         metadata=study_metadata,
@@ -93,10 +97,10 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         embeddings=embed_text(overview_chunk_text, ChunkType.OVERVIEW)
     )
 
-    phases: List[str] = design_module.get("phases", ["No info available"])
-    masked_entities: List[str] = masking_info.get("whoMasked", ["No info available"])
-
-    design_chunk_text: str = "\n".join([
+    # DESIGN
+    phases = design_module.get("phases", ["No info available"])
+    masked_entities = masking_info.get("whoMasked", ["No info available"])
+    design_chunk_text = "\n".join([
         f"Study Design Details ({nct_id})",
         f"Study Type: {design_module.get('studyType', 'No info available')}",
         f"Study Phases: {', '.join(phases)}",
@@ -104,7 +108,6 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         f"Masking Info: {masking_info.get('masking', 'No info available')} masking; Masked entities: {', '.join(masked_entities)}",
         f"Enrollment: {enrollment_info.get('count', 'No info available')} enrolled (type: {enrollment_info.get('type', 'No info available')})"
     ])
-
     design_chunk = Chunk(
         source_id=nct_id,
         metadata=study_metadata,
@@ -113,8 +116,8 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         embeddings=embed_text(design_chunk_text, ChunkType.DESIGN)
     )
 
-    std_ages: List[str] = eligibility_module.get("stdAges", ["No info available"])
-
+    # ELIGIBILITY
+    std_ages = eligibility_module.get("stdAges", ["No info available"])
     eligibility_chunk_text = "\n".join([
         f"Eligibility Criteria ({nct_id})",
         f"Sex: {eligibility_module.get('sex', 'No info available')}",
@@ -123,7 +126,6 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         f"Healthy Volunteers: {eligibility_module.get('healthyVolunteers', 'No info available')}",
         f"Standard Ages: {', '.join(std_ages)}"
     ])
-
     eligibility_chunk = Chunk(
         source_id=nct_id,
         metadata=study_metadata,
@@ -132,15 +134,14 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         embeddings=embed_text(eligibility_chunk_text, ChunkType.ELIGIBILITY)
     )
 
-    conditions: List[str] = conditions_module.get("conditions", ["No info available"])
-    keywords: List[str] = conditions_module.get("keywords", ["No info available"])
-
+    # CONDITIONS
+    conditions = conditions_module.get("conditions", ["No info available"])
+    keywords = conditions_module.get("keywords", ["No info available"])
     conditions_chunk_text = "\n".join([
         f"Condition Details ({nct_id})",
         f"Study-Related Conditions: {', '.join(conditions)}",
         f"Study Keywords: {', '.join(keywords)}"
     ])
-
     conditions_chunk = Chunk(
         source_id=nct_id,
         metadata=study_metadata,
@@ -149,26 +150,23 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         embeddings=embed_text(conditions_chunk_text, ChunkType.CONDITIONS)
     )
 
-    arms: List[Dict[str, Any]] = arms_interventions_module.get("armGroups", []) or []
-    interventions: List[Dict[str, Any]] = arms_interventions_module.get("interventions", []) or []
-
-    arms_text: str = "\n".join([
+    # ARMS & INTERVENTIONS
+    arms = arms_interventions_module.get("armGroups", [])
+    interventions = arms_interventions_module.get("interventions", [])
+    arms_text = "\n".join([
         f"- Arm: {arm.get('label', 'No info available')}, Type: {arm.get('type', 'No info available')}" for arm in arms
     ])
-
-    interventions_text: str = "\n".join([
+    interventions_text = "\n".join([
         f"- Intervention: {interv.get('name', 'No info available')} ({interv.get('type', 'No info available')}): {interv.get('description', 'No info available')}" for interv in interventions
     ])
-
     arms_interventions_chunk_text = "\n".join([
-            f"Arms and Interventions ({nct_id})",
-            "Study Arms:",
-            arms_text if arms_text else "No arm group info available.",
-            "",
-            "Interventions:",
-            interventions_text if interventions_text else "No intervention info available."
-        ])
-
+        f"Arms and Interventions ({nct_id})",
+        "Study Arms:",
+        arms_text or "No arm group info available.",
+        "",
+        "Interventions:",
+        interventions_text or "No intervention info available."
+    ])
     arms_interventions_chunk = Chunk(
         source_id=nct_id,
         metadata=study_metadata,
@@ -176,61 +174,37 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         text=arms_interventions_chunk_text,
         embeddings=embed_text(arms_interventions_chunk_text, ChunkType.ARMS_INTERVENTIONS)
     )
-    
-    primary_outcomes: List[Dict[str, Any]] = protocol.get("outcomesModule", {}).get("primaryOutcomes", [])
-    
-    if primary_outcomes:
-        primary_text = "\n".join([
+
+    # OUTCOMES
+    def format_outcomes(outcomes: list, label: str) -> str:
+        if not outcomes:
+            return f"No {label.lower()} outcomes info available."
+        return "\n".join([
             "\n".join([
-                f"PRIMARY OUTCOME {i + 1}",
-                f"\tMeasure: {outcome.get('measure', 'No measure available')}",
-                f"\tDescription: {outcome.get('description', 'No description available')}",
-                f"\tTime Frame: {outcome.get('timeFrame', 'No time frame available')}"
-            ])
-            for i, outcome in enumerate(primary_outcomes)
+                f"{label.upper()} OUTCOME {i + 1}",
+                f"\tMeasure: {o.get('measure', 'No measure available')}",
+                f"\tDescription: {o.get('description', 'No description available')}",
+                f"\tTime Frame: {o.get('timeFrame', 'No time frame available')}"
+            ]) for i, o in enumerate(outcomes)
         ])
-    else:
-        primary_text = "No primary outcomes info available."
 
-    outcomes_primary_chunk_text = "\n".join([
-        f"Primary Outcome Info ({nct_id}):",
-        primary_text
-    ])
+    outcomes_primary = protocol.get("outcomesModule", {}).get("primaryOutcomes", [])
+    outcomes_secondary = protocol.get("outcomesModule", {}).get("secondaryOutcomes", [])
 
-    outcomes_primary_chunk = Chunk(
+    primary_chunk = Chunk(
         source_id=nct_id,
         metadata=study_metadata,
         section=ChunkType.OUTCOMES_PRIMARY,
-        text=outcomes_primary_chunk_text,
-        embeddings=embed_text(outcomes_primary_chunk_text, ChunkType.OUTCOMES_PRIMARY)
+        text="\n".join([f"Primary Outcome Info ({nct_id}):", format_outcomes(outcomes_primary, "Primary")]),
+        embeddings=embed_text(format_outcomes(outcomes_primary, "Primary"), ChunkType.OUTCOMES_PRIMARY)
     )
 
-    secondary_outcomes: List[Dict[str, Any]] = protocol.get("outcomesModule", {}).get("secondaryOutcomes", [])
-
-    if secondary_outcomes:
-        secondary_text = "\n".join([
-            "\n".join([
-                f"SECONDARY OUTCOME {i + 1}",
-                f"\tMeasure: {outcome.get('measure', 'No measure available')}",
-                f"\tDescription: {outcome.get('description', 'No description available')}",
-                f"\tTime Frame: {outcome.get('timeFrame', 'No time frame available')}"
-            ])
-            for i, outcome in enumerate(secondary_outcomes)
-        ])
-    else:
-        secondary_text = "No secondary outcomes info available."
-
-    outcomes_secondary_chunk_text = "\n".join([
-        f"Secondary Outcome Info ({nct_id}):",
-        secondary_text
-    ])
-
-    outcomes_secondary_chunk = Chunk(
+    secondary_chunk = Chunk(
         source_id=nct_id,
         metadata=study_metadata,
         section=ChunkType.OUTCOMES_SECONDARY,
-        text=outcomes_secondary_chunk_text,
-        embeddings=embed_text(outcomes_secondary_chunk_text, ChunkType.OUTCOMES_SECONDARY)
+        text="\n".join([f"Secondary Outcome Info ({nct_id}):", format_outcomes(outcomes_secondary, "Secondary")]),
+        embeddings=embed_text(format_outcomes(outcomes_secondary, "Secondary"), ChunkType.OUTCOMES_SECONDARY)
     )
 
     return [
@@ -239,15 +213,6 @@ def create_chunks(full_study_data: Dict[str, Any], study_metadata: TrialMetaData
         eligibility_chunk, 
         conditions_chunk, 
         arms_interventions_chunk, 
-        outcomes_primary_chunk, 
-        outcomes_secondary_chunk
+        primary_chunk, 
+        secondary_chunk
     ]
-
-def embed_text(text: str, chunk_type: ChunkType) -> List[float]:
-    device: torch.device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    print(f"\t[embedding:{chunk_type.value}] using device: {device}")
-    embeddings: np.ndarray = MODEL.encode([text], device=device)
-    print(f"\t[embedding:{chunk_type.value}] size: {embeddings.shape}\n")
-
-    return embeddings.tolist()[0]

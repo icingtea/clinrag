@@ -2,20 +2,20 @@ import requests
 import json
 import os
 from chunking_utils import parse_data, create_chunks
-from typing import List, Dict, Any
+from typing import List
 from schemas import TrialMetaData
 
-BASE_URL: str = "https://clinicaltrials.gov/api/v2/studies"
-DATA_PATH: str = os.path.join("preprocessing", "trial_data", "trials.jsonl")
+BASE_URL = "https://clinicaltrials.gov/api/v2/studies"
+DATA_PATH = os.path.join("preprocessing", "trial_data", "trials.jsonl")
 
 def get_NCT_ids(page_size=1000) -> List[str]:
-    study_ids: List[str] = []
+    study_ids = []
 
     print("\n=== Fetching NCT IDs ===")
     print("-------------------------------------------------------\n")
 
     try:
-        response: requests.Response = requests.get(f"{BASE_URL}?pageSize={page_size}")
+        response = requests.get(f"{BASE_URL}?pageSize={page_size}")
         response.raise_for_status()
     except requests.RequestException as e:
         print(f"[ERROR] Failed to fetch NCT IDs: {e}")
@@ -27,9 +27,9 @@ def get_NCT_ids(page_size=1000) -> List[str]:
         print("[WARNING] Non-200 response; possible issue fetching data.")
         return study_ids
 
-    studies: List[Dict[str, Any]] = response.json().get("studies", [])
+    studies = response.json().get("studies", [])
     for study in studies:
-        nct_id: str = study.get("protocolSection", {}).get("identificationModule", {}).get("nctId")
+        nct_id = study.get("protocolSection", {}).get("identificationModule", {}).get("nctId")
         if nct_id:
             study_ids.append(nct_id)
 
@@ -53,7 +53,7 @@ def get_full_studies(study_ids: List[str]) -> None:
                     continue
 
                 try:
-                    full_study_data: Dict[str, Any] = response.json()
+                    full_study_data = response.json()
                     study_metadata: TrialMetaData = parse_data(full_study_data)
 
                     for chunk in create_chunks(full_study_data, study_metadata):
@@ -71,7 +71,6 @@ def get_full_studies(study_ids: List[str]) -> None:
     except Exception as e:
         print(f"[FATAL] Unexpected error during study fetch: {e}")
 
-
 if __name__ == "__main__":
-    ids: List[str] = get_NCT_ids()
+    ids = get_NCT_ids()
     get_full_studies(ids)
