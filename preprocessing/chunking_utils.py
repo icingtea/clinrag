@@ -1,8 +1,7 @@
 import torch
 import numpy as np
-from datetime import datetime
-from typing import List, Dict, Tuple, Any, Optional
-from formats import Chunk, TrialMetaData, ChunkType
+from typing import List, Dict, Tuple, Any
+from preprocessing.schemas import Chunk, TrialMetaData, ChunkType
 from sentence_transformers import SentenceTransformer
 
 MODEL = SentenceTransformer("intfloat/e5-large-v2")

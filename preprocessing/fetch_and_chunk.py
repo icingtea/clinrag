@@ -1,10 +1,9 @@
 import requests
 import json
 import os
-import logging
-from data_methods import parse_data, create_chunks
-from typing import List, Dict, Tuple, Any
-from formats import Chunk, TrialMetaData, ChunkType
+from chunking_utils import parse_data, create_chunks
+from typing import List, Dict, Any
+from schemas import TrialMetaData
 
 BASE_URL: str = "https://clinicaltrials.gov/api/v2/studies"
 DATA_PATH: str = os.path.join("preprocessing", "trial_data", "trials.jsonl")
@@ -36,7 +35,6 @@ def get_NCT_ids(page_size=1000) -> List[str]:
 
     print(f"[INFO] Retrieved {len(study_ids)} NCT IDs.")
     return study_ids
-
 
 def get_full_studies(study_ids: List[str]) -> None:
     print("\n=== Fetching Full Study Data ===")

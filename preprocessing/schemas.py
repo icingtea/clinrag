@@ -1,7 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel
 from enum import Enum
-from datetime import datetime
 
 class ChunkType(str, Enum):
     OVERVIEW = "overview"
