@@ -4,7 +4,7 @@ import openai
 import torch
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from pymongo.collection import Collection
 from sentence_transformers import SentenceTransformer
 from graph_nodes import GraphState
