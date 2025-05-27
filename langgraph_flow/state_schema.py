@@ -76,3 +76,4 @@ class GraphState(BaseModel):
     filter: Dict[str, Any]
     context: List[str]
     memory: Annotated[List, add_messages]
+    error: Optional[str]
