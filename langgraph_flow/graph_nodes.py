@@ -2,12 +2,13 @@ import os
 import textwrap
 import openai
 import torch
+import logging
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from pymongo.collection import Collection
 from sentence_transformers import SentenceTransformer
-from graph_nodes import GraphState
+from langchain_core.runnables import RunnableConfig
 
 from state_schema import (
     PromptMetadata,
@@ -17,10 +18,12 @@ from state_schema import (
     InterventionalAssignment,
     MaskingType,
     Sex,
-    StdAges
+    StdAges,
+    State
 )
+def query_metadata_extraction(state: State, config: RunnableConfig) -> Dict[str, Any]:
+    client: openai.OpenAI = state["openai_client"]
 
-def query_metadata_extraction(client: openai.OpenAI, state: GraphState) -> Dict[str, Any]:
     system_prompt = textwrap.dedent(f"""
     You are a metadata extractor for clinical trial queries. Parse the user's question and return a JSON with the following fields:
 
@@ -53,41 +56,54 @@ def query_metadata_extraction(client: openai.OpenAI, state: GraphState) -> Dict[
             text_format=PromptMetadata
         )
         parsed = response.output_parsed
+        print(parsed)
         return {"metadata": parsed.model_dump(), "error": None}
     except Exception as e:
         print(e)
         return {"metadata": {}, "error": "[ERROR] Metadata extraction failed."}
     
-def db_filter_assembly(state: GraphState) -> Dict[str, Any]:
+def db_filter_assembly(state: State) -> Dict[str, Any]:
     filter_dict: Dict[str, Any] = {}
 
     for field, value in state["metadata"].items():
+
         if isinstance(value, list) and value:
-            if all(isinstance(v, Enum) for v in value):
-                filter_dict[field] = {"$in": [v.value for v in value]}
+            if value is None or (isinstance(value, list) and not value):
+                continue
+
+            field = f"metadata.{field}"
+            flat_values = [v.value if isinstance(v, Enum) else v for v in value]
+            if len(flat_values) == 1:
+                filter_dict[field] = flat_values[0]
             else:
-                filter_dict[field] = {"$in": value}
+                filter_dict[field] = {"$in": flat_values}
+
         elif isinstance(value, datetime):
             if field == "startDateBefore":
-                filter_dict.setdefault("startDate", {})["$lt"] = value
+                filter_dict.setdefault("metadata.startDate", {})["$lt"] = value
             elif field == "startDateAfter":
-                filter_dict.setdefault("startDate", {})["$gt"] = value
+                filter_dict.setdefault("metadata.startDate", {})["$gt"] = value
             elif field == "completionDateBefore":
-                filter_dict.setdefault("completionDate", {})["$lt"] = value
+                filter_dict.setdefault("metadata.completionDate", {})["$lt"] = value
             elif field == "completionDateAfter":
-                filter_dict.setdefault("completionDate", {})["$gt"] = value
+                filter_dict.setdefault("metadata.completionDate", {})["$gt"] = value
 
+    print(filter_dict)
     return {"filter": filter_dict}
 
-def vector_search(state: GraphState, model: SentenceTransformer, index_name: str, collection: Collection) -> Dict[str, Any]:
+def vector_search(state: State) -> Dict[str, Any]:
+    model: SentenceTransformer = state["embedding_model"]
+    index_name: str = state["index_name"]
+    collection: Collection = state["mongo_collection"]
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     try:
-        prompt_embeddings = model.encode([state["question"]], device=device).tolist()
+        prompt_embeddings = model.encode([state["question"]], device=device).tolist()[0]
 
         pipeline = [
             {
-                "$vector_search": {
+                "$vectorSearch": {
                     "index": index_name,
                     "path": "embeddings",
                     "queryVector": prompt_embeddings,
@@ -104,16 +120,20 @@ def vector_search(state: GraphState, model: SentenceTransformer, index_name: str
                 }
             }
         ]
-
+ 
         results = collection.aggregate(pipeline)
         context_docs = [doc["text"] for doc in results if float(doc["score"]) > 0.7]
+
+        print(context_docs)
+
         return {"context": context_docs, "error": None}
 
     except Exception as e:
         print(e)
         return {"context": [], "error": "[ERROR] Vector search failed."}
-    
-def chat_response(client: openai.OpenAI, state: GraphState) -> Dict[str, Any]:
+
+def chat_response(state: State) -> Dict[str, Any]:
+    client: openai.OpenAI = state["openai_client"]
     prompt = state["question"]
     context = state["context"]
     memory = state["memory"]
@@ -139,8 +159,11 @@ def chat_response(client: openai.OpenAI, state: GraphState) -> Dict[str, Any]:
         print(e)
         return {"response": None, "error": "[ERROR] Failed to get chat response."}
 
-def error_check(state: GraphState) -> Optional[str]:
+def error_response(state: State) -> Dict[str, Any]:
+    return {"response": state["error"]}
+
+def error_check(state: State) -> bool:
     if state["error"]:
-        return state["error"]
+        return True
     else:
-        return None
+        return False

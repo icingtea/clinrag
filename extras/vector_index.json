@@ -8,59 +8,59 @@
         },
         {
             "type": "filter",
-            "path": "nctId"
+            "path": "metadata.nctId"
         },
         {
             "type": "filter",
-            "path": "status"
+            "path": "metadata.status"
         },
         {
             "type": "filter",
-            "path": "startDate"
+            "path": "metadata.startDate"
         },
         {
             "type": "filter",
-            "path": "completionDate"
+            "path": "metadata.completionDate"
         },
         {
             "type": "filter",
-            "path": "studyType"
+            "path": "metadata.studyType"
         },
         {
             "type": "filter",
-            "path": "allocation"
+            "path": "metadata.allocation"
         },
         {
             "type": "filter",
-            "path": "interventionModel"
+            "path": "metadata.interventionModel"
         },
         {
             "type": "filter",
-            "path": "maskingType"
+            "path": "metadata.maskingType"
         },
         {
             "type": "filter",
-            "path": "enrollmentCount"
+            "path": "metadata.enrollmentCount"
         },
         {
             "type": "filter",
-            "path": "healthyVolunteers"
+            "path": "metadata.healthyVolunteers"
         },
         {
             "type": "filter",
-            "path": "sex"
+            "path": "metadata.sex"
         },
         {
             "type": "filter",
-            "path": "minimumAge"
+            "path": "metadata.minimumAge"
         },
         {
             "type": "filter",
-            "path": "maximumAge"
+            "path": "metadata.maximumAge"
         },
         {
             "type": "filter",
-            "path": "stdAges"
+            "path": "metadata.stdAges"
         }
     ]
 }

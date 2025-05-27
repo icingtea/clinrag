@@ -1,9 +1,12 @@
+import openai
 from typing import Annotated, List, Optional
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 from typing import TypedDict, Dict, Any
 from datetime import datetime
 from enum import Enum
+from pymongo.collection import Collection
+from sentence_transformers import SentenceTransformer
 
 class Status(Enum):
     ACTIVE_NOT_RECRUITING = "ACTIVE_NOT_RECRUITING"
@@ -70,10 +73,15 @@ class PromptMetadata(BaseModel):
     sex: List[Sex] = Field(default_factory=list)
     stdAges: List[StdAges] = Field(default_factory=list)
 
-class GraphState(BaseModel):
+class State(TypedDict):
     question: str
     metadata: Dict[str, Any]
     filter: Dict[str, Any]
     context: List[str]
     memory: Annotated[List, add_messages]
     error: Optional[str]
+    response: Optional[str]
+    openai_client: openai.OpenAI
+    embedding_model: SentenceTransformer
+    mongo_collection: Collection
+    index_name: str
