@@ -2,15 +2,35 @@ import os
 import textwrap
 import openai
 import torch
-import logging
+from dotenv import load_dotenv
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
+from pymongo import MongoClient
 from pymongo.collection import Collection
 from sentence_transformers import SentenceTransformer
-from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import HumanMessage, AIMessage
 
-from state_schema import (
+load_dotenv()
+torch.classes.__path__ = []
+
+MONGODB_URI = os.getenv("MONGODB_URI")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DATABASE_NAME = os.getenv("DATABASE_NAME")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
+VECTOR_SEARCH_INDEX = os.getenv("VECTOR_SEARCH_INDEX")
+
+if not all([MONGODB_URI, OPENAI_API_KEY, DATABASE_NAME, COLLECTION_NAME, EMBEDDING_MODEL, VECTOR_SEARCH_INDEX]):
+    raise ValueError("[ERROR] Missing one or more required environment variables")
+
+mongo_client = MongoClient(MONGODB_URI)
+mongo_collection = mongo_client[DATABASE_NAME][COLLECTION_NAME]
+openai_client = openai.OpenAI()
+embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+index_name = VECTOR_SEARCH_INDEX
+
+from langgraph_flow.state_schema import (
     PromptMetadata,
     Status,
     StudyType,
@@ -21,8 +41,9 @@ from state_schema import (
     StdAges,
     State
 )
-def query_metadata_extraction(state: State, config: RunnableConfig) -> Dict[str, Any]:
-    client: openai.OpenAI = state["openai_client"]
+
+def query_metadata_extraction(state: State) -> Dict[str, Any]:
+    client: openai.OpenAI = openai_client
 
     system_prompt = textwrap.dedent(f"""
     You are a metadata extractor for clinical trial queries. Parse the user's question and return a JSON with the following fields:
@@ -56,7 +77,6 @@ def query_metadata_extraction(state: State, config: RunnableConfig) -> Dict[str,
             text_format=PromptMetadata
         )
         parsed = response.output_parsed
-        print(parsed)
         return {"metadata": parsed.model_dump(), "error": None}
     except Exception as e:
         print(e)
@@ -88,13 +108,12 @@ def db_filter_assembly(state: State) -> Dict[str, Any]:
             elif field == "completionDateAfter":
                 filter_dict.setdefault("metadata.completionDate", {})["$gt"] = value
 
-    print(filter_dict)
     return {"filter": filter_dict}
 
 def vector_search(state: State) -> Dict[str, Any]:
-    model: SentenceTransformer = state["embedding_model"]
-    index_name: str = state["index_name"]
-    collection: Collection = state["mongo_collection"]
+    model: SentenceTransformer = embedding_model
+    search_index: str = index_name
+    collection: Collection = mongo_collection
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -104,7 +123,7 @@ def vector_search(state: State) -> Dict[str, Any]:
         pipeline = [
             {
                 "$vectorSearch": {
-                    "index": index_name,
+                    "index": search_index,
                     "path": "embeddings",
                     "queryVector": prompt_embeddings,
                     "exact": True,
@@ -123,9 +142,6 @@ def vector_search(state: State) -> Dict[str, Any]:
  
         results = collection.aggregate(pipeline)
         context_docs = [doc["text"] for doc in results if float(doc["score"]) > 0.7]
-
-        print(context_docs)
-
         return {"context": context_docs, "error": None}
 
     except Exception as e:
@@ -133,15 +149,37 @@ def vector_search(state: State) -> Dict[str, Any]:
         return {"context": [], "error": "[ERROR] Vector search failed."}
 
 def chat_response(state: State) -> Dict[str, Any]:
-    client: openai.OpenAI = state["openai_client"]
+    client: openai.OpenAI = openai_client
     prompt = state["question"]
     context = state["context"]
     memory = state["memory"]
 
-    system_prompt = """
-    Answer the user question based off of the context provided to you. Make sure you stay factual, and do not respond with info that could not be inferred from the given context.
-    Respond along the lines of 'I'm sorry, I don't know', or 'I'm sorry, I don't have that information provided to me' if the context isn't enough for you to correctly answer.
-    """
+    system_prompt = textwrap.dedent("""
+        You are an expert assistant answering questions about clinical trials. Use the provided context to answer the user's question accurately and precisely. You may infer reasonable conclusions if they logically follow from the context, but do not introduce information not supported by the documents. If a clear answer is not possible, say something like:
+
+        > “I'm sorry, I don't have enough information to answer that.”
+
+        Do not mention the existence of "context" or "filters" in your response.
+
+        The trials you see have already been filtered based on details inferred from the user's query. For example, if a user asks about trials that started before a certain date, only trials matching that condition will be shown to you. The same applies to fields like:
+
+        - `nctId`  
+        - `status`  
+        - `startDateBefore` / `startDateAfter`  
+        - `completionDateBefore` / `completionDateAfter`  
+        - `studyType`  
+        - `allocation`  
+        - `interventionModel`  
+        - `maskingType`  
+        - `healthyVolunteers`  
+        - `sex`  
+        - `stdAges`  
+
+        Therefore, when questions relate to these properties, you can assume the trials shown already meet the implied criteria.
+
+        Be factual, concise, and avoid speculation. Always include trial numbers (e.g., NCT IDs) when referencing studies.
+    """)
+
     try:
         response = client.responses.parse(
             model="chatgpt-4o-latest",
@@ -153,7 +191,9 @@ def chat_response(state: State) -> Dict[str, Any]:
                 }
             ]
         )
-        return {"response": response.output_text, "error": None}
+        return {"response": response.output_text,
+                "memory": [HumanMessage(content = prompt), AIMessage(content = response.output_text)],
+                "error": None}
 
     except Exception as e:
         print(e)
