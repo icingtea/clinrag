@@ -12,3 +12,4 @@ wheels/
 # Manual
 preprocessing/trial_data
 .env
+test.ipynb

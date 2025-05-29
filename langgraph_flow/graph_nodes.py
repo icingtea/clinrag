@@ -2,6 +2,7 @@ import os
 import textwrap
 import openai
 import torch
+import logging
 from dotenv import load_dotenv
 from datetime import datetime
 from enum import Enum
@@ -13,6 +14,10 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 load_dotenv()
 torch.classes.__path__ = []
+
+logging.basicConfig(filename="session.log", filemode="w")
+logger = logging.getLogger("applog")
+logger.setLevel(logging.DEBUG)
 
 MONGODB_URI = os.getenv("MONGODB_URI")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -46,8 +51,12 @@ def query_metadata_extraction(state: State) -> Dict[str, Any]:
     client: openai.OpenAI = openai_client
 
     system_prompt = textwrap.dedent(f"""
-    You are a metadata extractor for clinical trial queries. Parse the user's question and return a JSON with the following fields:
-
+    You are a metadata extractor for clinical trial queries. Parse the user's question and return a JSON with the following fields. 
+    You may be provided with some conversation context. If the user's question seems like a followup, collect metadata by inferring accordingly.
+    IT IS OF UTMOST IMPORTANCE TO INCLUDE METADATA ASKED FOR IN THE CURRENT USER QUESTION THAT CAN BE INFERRED FROM YOUR CONTEXT, TO MAKE SURE THERE IS LONGEVITY OF CONVERSATION AND THINGS TALKED ABOUT EARLIER ARE REFERENCEABLE.
+    DO NOT HALLUCINATE INFO. IF THE USER REFERS TO A PART OF CONVERSATION YOU CANNOT SEE OR PINPOINT, SAY YOU DON'T REMEMBER AND ASK FOR THEM TO ELABORATE ON WHAT EXACTLY THEY'RE ASKING FOR.
+    DO NOT MAKE BLANKET STATEMENTS ABOUT WHAT IS CONTAINED IN THE DATASET. YOU DO NOT KNOW WHAT'S IN IT.
+                                    
     - nctId: list of strings
     - status: list of enum values from: {', '.join([e.name for e in Status])}
     - startDateBefore: ISO 8601 date (e.g., "2021-05-01") or null
@@ -63,9 +72,11 @@ def query_metadata_extraction(state: State) -> Dict[str, Any]:
     - stdAges: list of enum values from: {', '.join([e.name for e in StdAges])}, infer this from any age-related info or explicitly mentioned categories.
 
     If no data is found for a field, use `null` for dates and empty lists for others. Return only valid JSON.
+    THANKS :D
     """)
 
-    user_prompt = f"User question: {state['question']}\nReturn only valid JSON."
+    recent_context = "\n".join([f"ROLE: {message.type.upper()} MESSAGE: {message.content}" for message in state["memory"][-6:]]),
+    user_prompt = f"Context: {recent_context}\nUser question: {state['question']}\nReturn only valid JSON."
 
     try:
         response = client.responses.parse(
@@ -77,10 +88,17 @@ def query_metadata_extraction(state: State) -> Dict[str, Any]:
             text_format=PromptMetadata
         )
         parsed = response.output_parsed
-        return {"metadata": parsed.model_dump(), "error": None}
+
+        state_change = {"metadata": parsed.model_dump(), 
+                        "recent_context": "\n".join([f"ROLE: {message.type.upper()} MESSAGE: {message.content}" for message in state["memory"][-4:]]), 
+                        "error": None}
+        logger.info(f"[METADATA NODE] {state_change}")
+        return state_change
+    
     except Exception as e:
-        print(e)
-        return {"metadata": {}, "error": "[ERROR] Metadata extraction failed."}
+        state_change = {"metadata": {}, "error": "[ERROR] Metadata extraction failed."}
+        logger.debug(f"[METADATA NODE][ERROR] {e}")
+        return state_change
     
 def db_filter_assembly(state: State) -> Dict[str, Any]:
     filter_dict: Dict[str, Any] = {}
@@ -88,9 +106,6 @@ def db_filter_assembly(state: State) -> Dict[str, Any]:
     for field, value in state["metadata"].items():
 
         if isinstance(value, list) and value:
-            if value is None or (isinstance(value, list) and not value):
-                continue
-
             field = f"metadata.{field}"
             flat_values = [v.value if isinstance(v, Enum) else v for v in value]
             if len(flat_values) == 1:
@@ -108,7 +123,9 @@ def db_filter_assembly(state: State) -> Dict[str, Any]:
             elif field == "completionDateAfter":
                 filter_dict.setdefault("metadata.completionDate", {})["$gt"] = value
 
-    return {"filter": filter_dict}
+    state_change = {"filter": filter_dict}
+    logger.info(f"[FILTERING NODE] {state_change}")
+    return state_change
 
 def vector_search(state: State) -> Dict[str, Any]:
     model: SentenceTransformer = embedding_model
@@ -141,12 +158,16 @@ def vector_search(state: State) -> Dict[str, Any]:
         ]
  
         results = collection.aggregate(pipeline)
-        context_docs = [doc["text"] for doc in results if float(doc["score"]) > 0.7]
-        return {"context": context_docs, "error": None}
+        context_docs = [doc["text"] for doc in results if float(doc["score"]) > 0.5]
+
+        state_change = {"context": context_docs, "error": None}
+        logger.info(f"[VECTOR SEARCH NODE] {state_change}")
+        return state_change
 
     except Exception as e:
-        print(e)
-        return {"context": [], "error": "[ERROR] Vector search failed."}
+        state_change = {"context": [], "error": "[ERROR] Vector search failed."}
+        logger.debug(f"[VECTOR SEARCH NODE][ERROR] {e}")
+        return state_change
 
 def chat_response(state: State) -> Dict[str, Any]:
     client: openai.OpenAI = openai_client
@@ -191,16 +212,22 @@ def chat_response(state: State) -> Dict[str, Any]:
                 }
             ]
         )
-        return {"response": response.output_text,
-                "memory": [HumanMessage(content = prompt), AIMessage(content = response.output_text)],
-                "error": None}
+        
+        state_change = {"response": response.output_text,
+                        "memory": [HumanMessage(content = prompt), AIMessage(content = response.output_text)],
+                        "error": None}
+        logger.info(f"[CHAT RESPONSE NODE] {state_change}")
+        return state_change
 
     except Exception as e:
-        print(e)
-        return {"response": None, "error": "[ERROR] Failed to get chat response."}
+        state_change = {"response": None, "error": "[ERROR] Failed to get chat response."}
+        logger.debug(f"[CHAT RESPONSE NODE][ERROR] {e}")
+        return state_change
 
 def error_response(state: State) -> Dict[str, Any]:
-    return {"response": state["error"]}
+    state_change = {"response": state["error"]}
+    logger.info(f"[ERROR RESPONSE NODE] {state_change}")
+    return state_change
 
 def error_check(state: State) -> bool:
     if state["error"]:

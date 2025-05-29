@@ -75,6 +75,7 @@ class State(TypedDict):
     metadata: Dict[str, Any]
     filter: Dict[str, Any]
     context: List[str]
+    recent_context: str
     memory: Annotated[List, add_messages]
     error: Optional[str]
     response: Optional[str]

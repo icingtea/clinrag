@@ -14,8 +14,9 @@ def run_app():
             "metadata": {},
             "filter": {},
             "context": [],
-            "response": None,
-            "error": None,
+            "response": "",
+            "error": "",
+            "recent_context": ""
         }
 
     if "graph_config" not in st.session_state:
