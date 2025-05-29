@@ -1,0 +1,24 @@
+[theme]
+base = "dark"
+font = "consolas"
+codeFont = "consolas"
+headingFont = "consolas"
+
+primaryColor = "#86EFAC"
+secondaryBackgroundColor = "#0C1820"
+textColor = "#C8D1DC"
+linkColor = "#38BDF8"
+codeBackgroundColor = "#1E2D32"
+borderColor = "#4CAF86"
+showWidgetBorder = true
+baseRadius = "0.75rem"
+
+[theme.sidebar]
+backgroundColor = "#0A1525"
+secondaryBackgroundColor = "#1E2D32"
+primaryColor = "#34D399"
+textColor = "#C8D1DC"
+
+font = "consolas"
+codeFont = "consolas"
+headingFont = "consolas"

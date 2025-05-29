@@ -5,6 +5,13 @@ from langchain_core.messages.ai import AIMessage
 from langchain_core.messages.human import HumanMessage
 
 def run_app():    
+
+    st.set_page_config(
+        page_title="clinRAG",
+        page_icon="🧪",
+        layout="wide"
+    )
+
     memory: MemorySaver = MemorySaver()
 
     if "graph_state" not in st.session_state:
@@ -26,23 +33,23 @@ def run_app():
 
     graph = assemble_graph(memory=memory)
 
-    st.title("Try out ClinRAG!")
+    st.title("clinRAG")
 
     for message in st.session_state.graph_state["memory"]:
         if isinstance(message, HumanMessage):
-            role = "user"
+            role = "🌻"
             content = message.content
         elif isinstance(message, AIMessage):
-            role = "assistant"
+            role = "🤖"
             content = message.content
         else:
-            role = "assistant"
+            role = "🤖"
             content = getattr(message, "content", str(message))
         with st.chat_message(role):
             st.markdown(content)
 
     if prompt := st.chat_input("Ask a clinical trial related question"):
-        with st.chat_message("user"):
+        with st.chat_message("🌻"):
             st.markdown(prompt)
 
         st.session_state.graph_state["question"] = prompt
@@ -53,7 +60,7 @@ def run_app():
         )
         st.session_state.graph_state = new_state
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar="🤖"):
             reply = new_state.get("response", "[ERROR] Could not get response.")
             st.markdown(reply)
 
