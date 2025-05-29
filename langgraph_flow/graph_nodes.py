@@ -27,7 +27,7 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 VECTOR_SEARCH_INDEX = os.getenv("VECTOR_SEARCH_INDEX")
 
 if not all([MONGODB_URI, OPENAI_API_KEY, DATABASE_NAME, COLLECTION_NAME, EMBEDDING_MODEL, VECTOR_SEARCH_INDEX]):
-    raise ValueError("[ERROR] Missing one or more required environment variables")
+    raise EnvironmentError("[ERROR] Missing one or more required environment variables")
 
 mongo_client = MongoClient(MONGODB_URI)
 mongo_collection = mongo_client[DATABASE_NAME][COLLECTION_NAME]
