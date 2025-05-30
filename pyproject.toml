@@ -17,5 +17,16 @@ dependencies = [
     "requests>=2.32.3",
     "sentence-transformers>=4.1.0",
     "streamlit>=1.45.1",
+    "torch>=2.7.0",
     "transformers>=4.52.2",
 ]
+
+[tool.uv.sources]
+torch = [
+    {index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'"}
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
