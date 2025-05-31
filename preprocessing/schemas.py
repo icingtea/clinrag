@@ -2,6 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from enum import Enum
 
+
 class ChunkType(str, Enum):
     OVERVIEW = "overview"
     DESIGN = "design"
@@ -10,6 +11,7 @@ class ChunkType(str, Enum):
     ARMS_INTERVENTIONS = "armsInterventions"
     OUTCOMES_PRIMARY = "primaryOutcomes"
     OUTCOMES_SECONDARY = "secondaryOutcomes"
+
 
 class TrialMetaData(BaseModel):
     nctId: str
@@ -26,6 +28,7 @@ class TrialMetaData(BaseModel):
     minimumAge: Optional[str] = None
     maximumAge: Optional[str] = None
     stdAges: Optional[List[str]] = None
+
 
 class Chunk(BaseModel):
     source_id: str

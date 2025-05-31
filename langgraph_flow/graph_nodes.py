@@ -26,7 +26,16 @@ COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
 VECTOR_SEARCH_INDEX = os.getenv("VECTOR_SEARCH_INDEX")
 
-if not all([MONGODB_URI, OPENAI_API_KEY, DATABASE_NAME, COLLECTION_NAME, EMBEDDING_MODEL, VECTOR_SEARCH_INDEX]):
+if not all(
+    [
+        MONGODB_URI,
+        OPENAI_API_KEY,
+        DATABASE_NAME,
+        COLLECTION_NAME,
+        EMBEDDING_MODEL,
+        VECTOR_SEARCH_INDEX,
+    ]
+):
     raise EnvironmentError("[ERROR] Missing one or more required environment variables")
 
 mongo_client = MongoClient(MONGODB_URI)
@@ -44,13 +53,15 @@ from langgraph_flow.state_schema import (
     MaskingType,
     Sex,
     StdAges,
-    State
+    State,
 )
+
 
 def query_metadata_extraction(state: State) -> Dict[str, Any]:
     client: openai.OpenAI = openai_client
 
-    system_prompt = textwrap.dedent(f"""
+    system_prompt = textwrap.dedent(
+        f"""
     You are a metadata extractor for clinical trial queries. Parse the user's question and return a JSON with the following fields. 
     You may be provided with some conversation context. If the user's question seems like a followup, collect metadata by inferring accordingly.
     IT IS OF UTMOST IMPORTANCE TO INCLUDE METADATA ASKED FOR IN THE CURRENT USER QUESTION THAT CAN BE INFERRED FROM YOUR CONTEXT, TO MAKE SURE THERE IS LONGEVITY OF CONVERSATION AND THINGS TALKED ABOUT EARLIER ARE REFERENCEABLE.
@@ -73,9 +84,17 @@ def query_metadata_extraction(state: State) -> Dict[str, Any]:
 
     If no data is found for a field, use `null` for dates and empty lists for others. Return only valid JSON.
     THANKS :D
-    """)
+    """
+    )
 
-    recent_context = "\n".join([f"ROLE: {message.type.upper()} MESSAGE: {message.content}" for message in state["memory"][-6:]]),
+    recent_context = (
+        "\n".join(
+            [
+                f"ROLE: {message.type.upper()} MESSAGE: {message.content}"
+                for message in state["memory"][-6:]
+            ]
+        ),
+    )
     user_prompt = f"Context: {recent_context}\nUser question: {state['question']}\nReturn only valid JSON."
 
     try:
@@ -83,23 +102,31 @@ def query_metadata_extraction(state: State) -> Dict[str, Any]:
             model="chatgpt-4o-latest",
             input=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
-            text_format=PromptMetadata
+            text_format=PromptMetadata,
         )
         parsed = response.output_parsed
 
-        state_change = {"metadata": parsed.model_dump(), 
-                        "recent_context": "\n".join([f"ROLE: {message.type.upper()} MESSAGE: {message.content}" for message in state["memory"][-4:]]), 
-                        "error": None}
+        state_change = {
+            "metadata": parsed.model_dump(),
+            "recent_context": "\n".join(
+                [
+                    f"ROLE: {message.type.upper()} MESSAGE: {message.content}"
+                    for message in state["memory"][-4:]
+                ]
+            ),
+            "error": None,
+        }
         logger.info(f"[METADATA NODE] {state_change}")
         return state_change
-    
+
     except Exception as e:
         state_change = {"metadata": {}, "error": "[ERROR] Metadata extraction failed."}
         logger.debug(f"[METADATA NODE][ERROR] {e}")
         return state_change
-    
+
+
 def db_filter_assembly(state: State) -> Dict[str, Any]:
     filter_dict: Dict[str, Any] = {}
 
@@ -127,6 +154,7 @@ def db_filter_assembly(state: State) -> Dict[str, Any]:
     logger.info(f"[FILTERING NODE] {state_change}")
     return state_change
 
+
 def vector_search(state: State) -> Dict[str, Any]:
     model: SentenceTransformer = embedding_model
     search_index: str = index_name
@@ -145,18 +173,18 @@ def vector_search(state: State) -> Dict[str, Any]:
                     "queryVector": prompt_embeddings,
                     "exact": True,
                     "limit": 15,
-                    "filter": state["filter"]
+                    "filter": state["filter"],
                 }
             },
             {
                 "$project": {
                     "_id": 0,
                     "text": 1,
-                    "score": {"$meta": "vectorSearchScore"}
+                    "score": {"$meta": "vectorSearchScore"},
                 }
-            }
+            },
         ]
- 
+
         results = collection.aggregate(pipeline)
         context_docs = [doc["text"] for doc in results if float(doc["score"]) > 0.5]
 
@@ -169,19 +197,18 @@ def vector_search(state: State) -> Dict[str, Any]:
         logger.debug(f"[VECTOR SEARCH NODE][ERROR] {e}")
         return state_change
 
+
 def chat_response(state: State) -> Dict[str, Any]:
     client: openai.OpenAI = openai_client
     prompt = state["question"]
     context = state["context"]
     memory = state["memory"]
 
-    system_prompt = textwrap.dedent("""
+    system_prompt = textwrap.dedent(
+        """
         You are an expert assistant answering questions about clinical trials. Use the provided context to answer the user's question accurately and precisely. You may infer reasonable conclusions if they logically follow from the context, but do not introduce information not supported by the documents. If a clear answer is not possible, say something like:
-
         > “I'm sorry, I don't have enough information to answer that.”
-
         Do not mention the existence of "context" or "filters" in your response.
-
         The trials you see have already been filtered based on details inferred from the user's query. For example, if a user asks about trials that started before a certain date, only trials matching that condition will be shown to you. The same applies to fields like:
 
         - `nctId`  
@@ -198,8 +225,10 @@ def chat_response(state: State) -> Dict[str, Any]:
 
         Therefore, when questions relate to these properties, you can assume the trials shown already meet the implied criteria.
 
-        Be factual, concise, and avoid speculation. Always include trial numbers (e.g., NCT IDs) when referencing studies.
-    """)
+        BE FACTUAL, CONCISE, AND AVOID SPECULATION. PLEASE PROVIDE TRIAL INFORMATION (LIKE DIRECT URL LINKING AND NCTID) IN YOUR RESPONSES.
+        TRY TO LINK TO TRIAL URLS (WHICH YOU'LL FIND IN THE CONTEXT) WHENEVER YOU CAN. MAKE SURE THESE ARE CORRECT AND WELL PLACED.
+    """
+    )
 
     try:
         response = client.responses.parse(
@@ -208,26 +237,36 @@ def chat_response(state: State) -> Dict[str, Any]:
                 {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
-                    "content": f"MESSAGE HISTORY: {memory}\nCONTEXT: {context}\nUSER PROMPT: {prompt}"
-                }
-            ]
+                    "content": f"MESSAGE HISTORY: {memory}\nCONTEXT: {context}\nUSER PROMPT: {prompt}",
+                },
+            ],
         )
-        
-        state_change = {"response": response.output_text,
-                        "memory": [HumanMessage(content = prompt), AIMessage(content = response.output_text)],
-                        "error": None}
+
+        state_change = {
+            "response": response.output_text,
+            "memory": [
+                HumanMessage(content=prompt),
+                AIMessage(content=response.output_text),
+            ],
+            "error": None,
+        }
         logger.info(f"[CHAT RESPONSE NODE] {state_change}")
         return state_change
 
     except Exception as e:
-        state_change = {"response": None, "error": "[ERROR] Failed to get chat response."}
+        state_change = {
+            "response": None,
+            "error": "[ERROR] Failed to get chat response.",
+        }
         logger.debug(f"[CHAT RESPONSE NODE][ERROR] {e}")
         return state_change
+
 
 def error_response(state: State) -> Dict[str, Any]:
     state_change = {"response": state["error"]}
     logger.info(f"[ERROR RESPONSE NODE] {state_change}")
     return state_change
+
 
 def error_check(state: State) -> bool:
     if state["error"]:

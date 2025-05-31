@@ -5,6 +5,7 @@ from typing import TypedDict, Dict, Any
 from datetime import datetime
 from enum import Enum
 
+
 class Status(Enum):
     ACTIVE_NOT_RECRUITING = "ACTIVE_NOT_RECRUITING"
     COMPLETED = "COMPLETED"
@@ -21,15 +22,18 @@ class Status(Enum):
     WITHHELD = "WITHHELD"
     UNKNOWN = "UNKNOWN"
 
+
 class StudyType(Enum):
     EXPANDED_ACCESS = "EXPANDED_ACCESS"
     INTERVENTIONAL = "INTERVENTIONAL"
     OBSERVATIONAL = "OBSERVATIONAL"
 
+
 class DesignAllocation(Enum):
     RANDOMIZED = "RANDOMIZED"
     NON_RANDOMIZED = "NON_RANDOMIZED"
     NA = "N/A"
+
 
 class InterventionalAssignment(Enum):
     SINGLE_GROUP = "SINGLE_GROUP"
@@ -38,6 +42,7 @@ class InterventionalAssignment(Enum):
     FACTORIAL = "FACTORIAL"
     SEQUENTIAL = "SEQUENTIAL"
 
+
 class MaskingType(Enum):
     NONE = "NONE"
     SINGLE = "SINGLE"
@@ -45,15 +50,18 @@ class MaskingType(Enum):
     TRIPLE = "TRIPLE"
     QUADRUPLE = "QUADRUPLE"
 
+
 class Sex(Enum):
     FEMALE = "FEMALE"
     MALE = "MALE"
     ALL = "ALL"
 
+
 class StdAges(Enum):
     CHILD = "CHILD"
     ADULT = "ADULT"
     OLDER_ADULT = "OLDER_ADULT"
+
 
 class PromptMetadata(BaseModel):
     nctId: List[str] = Field(default_factory=list)
@@ -69,6 +77,7 @@ class PromptMetadata(BaseModel):
     healthyVolunteers: List[bool] = Field(default_factory=list)
     sex: List[Sex] = Field(default_factory=list)
     stdAges: List[StdAges] = Field(default_factory=list)
+
 
 class State(TypedDict):
     question: str

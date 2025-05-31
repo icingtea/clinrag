@@ -8,6 +8,7 @@ from schemas import TrialMetaData
 BASE_URL = "https://clinicaltrials.gov/api/v2/studies"
 DATA_PATH = os.path.join("preprocessing", "trial_data", "trials.jsonl")
 
+
 def get_NCT_ids(page_size=1000) -> List[str]:
     study_ids = []
 
@@ -29,12 +30,17 @@ def get_NCT_ids(page_size=1000) -> List[str]:
 
     studies = response.json().get("studies", [])
     for study in studies:
-        nct_id = study.get("protocolSection", {}).get("identificationModule", {}).get("nctId")
+        nct_id = (
+            study.get("protocolSection", {})
+            .get("identificationModule", {})
+            .get("nctId")
+        )
         if nct_id:
             study_ids.append(nct_id)
 
     print(f"[INFO] Retrieved {len(study_ids)} NCT IDs.")
     return study_ids
+
 
 def get_full_studies(study_ids: List[str]) -> None:
     print("\n=== Fetching Full Study Data ===")
@@ -43,13 +49,18 @@ def get_full_studies(study_ids: List[str]) -> None:
     counter = 1
 
     try:
-        with open(DATA_PATH, "w") as outfile:
+        os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
+        with open(DATA_PATH, "w+") as outfile:
             for nct_id in study_ids:
                 response = requests.get(f"{BASE_URL}/{nct_id}")
-                print(f"[{counter}] Fetching {nct_id}... Status: {response.status_code}")
+                print(
+                    f"[{counter}] Fetching {nct_id}... Status: {response.status_code}"
+                )
 
                 if response.status_code != 200:
-                    print(f"[ERROR] Skipping {nct_id} due to bad status code: {response.status_code}")
+                    print(
+                        f"[ERROR] Skipping {nct_id} due to bad status code: {response.status_code}"
+                    )
                     continue
 
                 try:
@@ -70,6 +81,7 @@ def get_full_studies(study_ids: List[str]) -> None:
         print("[ERROR] Output file path not found.")
     except Exception as e:
         print(f"[FATAL] Unexpected error during study fetch: {e}")
+
 
 if __name__ == "__main__":
     ids = get_NCT_ids()
