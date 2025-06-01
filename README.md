@@ -11,7 +11,7 @@ lightweight streamlit deployment @ [clinrag.streamlit.app](https://clinrag.strea
 - 📄 parses and chunks (partial, for now) trial data from about ~1000 trials (i am on mongoDB free tier)  
 - 🧠 embeds clinical trial chunks using `intfloat/e5-large-v2` (you can swap it out in `.env` if you're running locally)  
 - 🗄️ stores data in mongoDB with a vector search index  
-- 🔍 performs quick semantic search over the embedded chunks, with filtering based on:
+- 🔍 performs quick semantic search over the embedded chunks, with autofiltering based on:
 
   ```
   nctId
