@@ -31,35 +31,31 @@ lightweight streamlit deployment @ [clinrag.streamlit.app](https://clinrag.strea
 
 ---
 
-## 🧩 clinical trial chunking
-
-this project parses and embeds specific parts of each clinical trial to make them semantically searchable. here’s what gets processed:
-
 ### 🔬 overview of clinical trial parts:
 
-1. **OVERVIEW**  
-   - general info: titles, description, status, dates, link to full study  
-   - from `identificationModule`, `statusModule`, `descriptionModule`
+1. **📘 OVERVIEW**  
+ - general info: titles, description, status, dates, link to full study  
+ - from `identificationModule`, `statusModule`, `descriptionModule`
 
-2. **DESIGN**  
-   - study type, phases, intervention model, allocation, masking, enrollment  
-   - from `designModule`, `designInfo`, `maskingInfo`, `enrollmentInfo`
+2. **🧪 DESIGN**  
+ - study type, phases, intervention model, allocation, masking, enrollment  
+ - from `designModule`, `designInfo`, `maskingInfo`, `enrollmentInfo`
 
-3. **ELIGIBILITY**  
-   - participant criteria: age range, sex, healthy volunteer status  
-   - from `eligibilityModule`
+3. **🧍‍♂️ ELIGIBILITY**  
+ - participant criteria: age range, sex, healthy volunteer status  
+ - from `eligibilityModule`
 
-4. **CONDITIONS**  
-   - conditions studied + related keywords  
-   - from `conditionsModule`
+4. **🧬 CONDITIONS**  
+ - conditions studied + related keywords  
+ - from `conditionsModule`
 
-5. **ARMS & INTERVENTIONS**  
-   - experimental/control groups and interventions (drugs, devices, etc)  
-   - from `armsInterventionsModule`
+5. **🧫 ARMS & INTERVENTIONS**  
+ - experimental/control groups and interventions (drugs, devices, etc)  
+ - from `armsInterventionsModule`
 
-6. **OUTCOMES**  
-   - primary/secondary outcomes: what’s being measured, when, and how  
-   - from `outcomesModule` inside `protocolSection`
+6. **📊 OUTCOMES**  
+ - primary/secondary outcomes: what’s being measured, when, and how  
+ - from `outcomesModule` inside `protocolSection`
 
 ---
 
