@@ -6,6 +6,13 @@ lightweight streamlit deployment @ [clinrag.streamlit.app](https://clinrag.strea
 
 ---
 
+## 🗒️ to-do
+
+- 🤖 llm-as-a-judge evaluation
+- 🔬 complete trial data parsing
+
+---
+
 ## 🔄 flow
 
 - 📄 parses and chunks (partial, for now) trial data from about ~1000 trials (i am on mongoDB free tier)  
